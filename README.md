@@ -1,10 +1,118 @@
-# Nocturnus GuitaRNG MPU node
+# Nocturnus
+
+**A-004 · "Paradox Heart and Bloom" · GuitaRNG entropy node**
+
+A guitar that harvests randomness from the way it is played. An ESP32-S3 Super
+Mini and an MPU-6050 ride inside a Tease SBH-HD, measure every source of
+physical noise they can reach, test each one against NIST SP 800-90B in real
+time, and release 256-bit conditioned blocks over Wi-Fi to the CHIRASU fleet.
+Every strum, headbang and lean on stage becomes a `STRUM` event on the wire.
+
+Written in Rust on [Embassy](https://embassy.dev): `no_std`, async
+tasks on esp-hal. This is the platform the other GuitaRNG guitars (Spectra, Sylvia, Thalyn, Neptonius) are moving to; the
+MicroPython generation lives on the `main` branch of this repository.
+
+> *You can't close source the universe.* Every number this node claims is
+> measured on the device and shown on its dashboard, source by source.
 
 Embassy/no-std firmware for an ESP32-S3 Super Mini and MPU-6050. It joins the
 configured phone hotspot, sends the same 32-byte conditioned entropy datagrams
 used by the Spectra/Sylvia receiver, emits `STRUM` when the MPU detects
 motion, and mirrors entropy plus health reports over the board's native USB
 Serial/JTAG connection.
+
+## At a glance
+
+```mermaid
+flowchart LR
+    subgraph guitar["Inside the guitar"]
+        MPU["MPU-6050<br/>accel, gyro, temp"] --> H
+        CLK["MPU clock vs<br/>ESP32 crystal"] --> H
+        RNG["ESP32-S3<br/>hardware RNG"] --> H
+        ADC["floating ADC pad"] --> H
+        MIX["timing sources<br/>(mix only)"] --> H
+        H["per-source health tests<br/>RCT · APT · Markov"] --> C["SHA3-512<br/>conditioner"]
+        H -. "credit only if healthy<br/>and assessed" .-> B["credit budget<br/>256 bits per block"]
+        B --> C
+        MPU --> MD["motion detector<br/>accel + gyro"]
+    end
+    C -- "UDP 5059<br/>32-byte blocks" --> PH["phone hotspot<br/>Null Tunnel relay"]
+    MD -- "UDP 5008<br/>STRUM / HEARTBEAT" --> PH
+    PH --> RPI["RPi5 · Discord"]
+    PH --> NM["Null Magnet"]
+    DASH["phone browser<br/>dashboard :80"] <--> guitar
+```
+
+| | |
+|---|---|
+| **Board** | ESP32-S3 Super Mini (Wi-Fi, native USB) |
+| **Sensor** | MPU-6050 / GY-521 (6500-family clones accepted) |
+| **Firmware** | Rust, Embassy, esp-hal 1.x, `no_std` |
+| **Conditioner** | SHA3-512, 32 bytes released, 32 chained and never sent |
+| **Health tests** | NIST SP 800-90B RCT and APT, plus an on-device Markov estimate, per source |
+| **Release gate** | 256 assessed bits from credited sources, at least `min_live` sources alive, at most one block per second |
+| **Motion** | Accelerometer and gyro triggers, median + average filtered, debounced |
+| **Control** | Phone dashboard (HTTP Basic auth), USB serial, UDP control port |
+| **Persistence** | A/B flash slots with CRC, survives power loss mid-write |
+| **Liveness** | Hardware watchdog, sensor re-probe, Wi-Fi reconnect |
+
+## Why this is different
+
+- **Every source is measured, not assumed.** Each raw source carries its own
+  SP 800-90B most-common-value min-entropy, Shannon entropy and Markov
+  estimate, beside what an ideal source would score at the same sample count.
+  A score is never shown without its sample size.
+- **Credit is earned, and you can see who earned it.** The dashboard's
+  *funded bits* column shows how much of every released block each source
+  paid for. Credit thrown away by a health failure never counts.
+- **Failures latch.** A source that trips a continuous health test stays out
+  of the pool until someone deliberately resets it, and all unspent credit is
+  discarded with it.
+- **No credit the conditioner cannot hold.** Unspent credit is capped at what
+  one SHA3-512 digest can carry, so a node that sat idle never emits a
+  backlog of blocks it has no entropy for.
+- **The output is measured too.** Released blocks go through the same
+  estimators and continuous tests as the raw sources.
+- **Uncredited is not ignored.** Timing, RSSI and gross motion are hashed in
+  for defense in depth but never counted, because they can be influenced from
+  outside.
+
+## Quick start
+
+1. Wire the sensor as in [Wiring](#wiring) (five wires).
+2. Put your hotspot name and password in `src/config.rs`, or set them later
+   from the setup network.
+3. Build and flash (see [Build and flash](#build-and-flash)).
+4. Watch the USB log for `WIRING found=1` and `HEALTH ... mpu=1`.
+5. Open the dashboard at the address printed as `WEB url=...`, sign in as
+   `admin` / `nocturnus`, and change the password under Admin.
+6. Tune the two motion triggers with the guitar on its strap.
+
+If the hotspot is unreachable, join the `NOCTURNUS-SETUP` network and open
+`http://192.168.4.1/`.
+
+## Fleet ports
+
+| Node | Strum / heartbeat | Entropy |
+|---|---|---|
+| Spectra | 5005 | 5056 |
+| Neptonius | 5006 | 5057 |
+| Thalyn | 5007 | 5058 |
+| **Nocturnus** | **5008** | **5059** |
+| Sylvia | 5009 | 5060 |
+| Control (all) | 5013 | |
+
+## Contents
+
+[Wiring](#wiring) ·
+[Dashboard](#dashboard) ·
+[Wi-Fi setup portal](#wi-fi-setup-portal) ·
+[Settings persistence](#settings-persistence) ·
+[Network behavior](#network-behavior) ·
+[USB output](#usb-output) ·
+[Entropy pipeline](#entropy-pipeline) ·
+[Measuring the sources](#measuring-the-sources) ·
+[Build and flash](#build-and-flash)
 
 ## Wiring
 
@@ -395,10 +503,23 @@ The checked-in Cargo configuration selects `xtensa-esp32s3-none-elf`, builds
 runner. Hold **BOOT**, tap **RESET**, then release **BOOT** if automatic download
 mode does not engage.
 
+On Linux:
+
+```bash
+cargo build --release
+espflash flash --monitor target/xtensa-esp32s3-none-elf/release/guitarng-mpu
+```
+
 Verification commands used for this revision:
 
 ```powershell
 cargo check --release --offline
 cargo build --release --offline
 cargo +stable test --lib --target x86_64-pc-windows-msvc --offline --config 'unstable.build-std=[]'
+```
+
+Host tests on Linux (no device needed):
+
+```bash
+cargo +stable test --lib --target x86_64-unknown-linux-gnu --config 'unstable.build-std=[]'
 ```

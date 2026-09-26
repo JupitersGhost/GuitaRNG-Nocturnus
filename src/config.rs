@@ -83,8 +83,8 @@ pub const I2C_FREQ_HZ: u32 = 400_000;
 // Network
 // ---------------------------------------------------------------------------
 
-pub const WIFI_SSID: &str = "ExtremelyScaryVirus.dll";
-pub const WIFI_PASSWORD: &str = "42069lol";
+pub const WIFI_SSID: &str = "your-wifi";
+pub const WIFI_PASSWORD: &str = "your-password";
 
 /// Local provisioning network. The access point stays available while the
 /// station connection runs, so changing the destination hotspot never needs a
