@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
+<title>Nocturnus</title>
+<style>
+:root{--bg:#090b10;--panel:#111625;--well:#0c101b;--line:#262e48;--text:#edf2ff;--muted:#9aa6c7;--accent:#8ca8ff;--good:#5ee0a0;--warn:#ffc266;--bad:#ff6b7a;--info:#7fb2ff;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:max(12px,env(safe-area-inset-top)) 12px 72px}
+main{max-width:760px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+main>*{min-width:0}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:4px 2px}
+h1{margin:0;font-size:1.35rem;letter-spacing:.1em}
+h1 small{color:var(--muted);font-weight:500;letter-spacing:.04em;margin-left:8px;font-size:.9rem}
+.pill{border:1px solid var(--line);border-radius:999px;padding:4px 11px;font-size:.8rem;color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}
+.dot.on{background:var(--good)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+h2{margin:0 0 10px;font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:560px){.tiles{grid-template-columns:repeat(4,1fr)}}
+.tile{background:var(--well);border:1px solid var(--line);border-radius:10px;padding:10px}
+.tile b{display:block;font-size:1.35rem;font-variant-numeric:tabular-nums;line-height:1.2}
+.tile span{color:var(--muted);font-size:.74rem}
+canvas{width:100%;height:84px;display:block;background:var(--well);border:1px solid var(--line);border-radius:10px}
+.bar{height:8px;background:var(--well);border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
+table{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.low{color:var(--bad);font-weight:700}
+td.dim{color:var(--muted)}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:500;font-size:.7rem}
+td:nth-child(n+3),th:nth-child(n+3){text-align:right}
+.v{display:inline-block;min-width:22px;text-align:center;border-radius:6px;padding:1px 6px;font-weight:700;font-size:.74rem}
+.vH{background:#123524;color:var(--good)}.vD{background:#3a2c10;color:var(--warn)}.vW{background:#15223d;color:var(--info)}.vF{background:#3d1219;color:var(--bad)}
+.mix{color:var(--muted);font-size:.68rem;margin-left:6px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:0;font-size:.9rem}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:block;font-size:.76rem;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--well);color:var(--text);font-size:1rem}
+button{padding:10px 14px;border:0;border-radius:9px;background:var(--accent);color:#081027;font-weight:700;font-size:.95rem;margin-top:12px}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+button.danger{background:transparent;color:var(--bad);border:1px solid #5a2330}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.warn{border-color:#5a4410;background:#1d170a;color:var(--warn)}
+.bad{border-color:#5a2330;background:#1f0c11;color:var(--bad)}
+.bad span{color:var(--text);overflow-wrap:anywhere}
+.hint{color:var(--muted);font-size:.76rem;margin:8px 0 0}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem}
+#toast{position:fixed;left:12px;right:12px;bottom:12px;max-width:760px;margin:0 auto;background:var(--well);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .3s;pointer-events:none;overflow-wrap:anywhere}
+#toast.show{opacity:1}
+</style></head><body><main>
+
+<header><h1>NOCTURNUS<small>A-004</small></h1><div class="pill"><span class="dot" id="dot"></span><span id="conn">connecting</span></div></header>
+
+<section class="warn" id="defpw" hidden>The dashboard is still on its default password. Change it under Admin.</section>
+
+<section class="bad" id="nompu" hidden><b>Motion sensor not found.</b> <span id="mpuerr"></span><br>Check the wiring: VCC to 3V3, GND to GND, SDA to GPIO8, SCL to GPIO9, INT to GPIO11. Nocturnus keeps retrying every 5 seconds and picks it up by itself.</section>
+
+<section><h2>Movement</h2>
+<canvas id="spark" width="720" height="168"></canvas>
+<p class="hint">The last minute of movement: <b style="color:var(--accent)">acceleration</b> and <b style="color:var(--good)">rotation</b>, each drawn against its own trigger. The dashed line is the trigger: anything above it counts as motion.</p>
+<div class="tiles" style="margin-top:8px">
+<div class="tile"><b id="lvl">0</b><span>acceleration now, mg</span></div>
+<div class="tile"><b id="rot">0</b><span>rotation now, &deg;/s</span></div>
+<div class="tile"><b id="eps">0</b><span>events sent per s</span></div>
+<div class="tile"><b id="mps">0</b><span>motion hits per s</span></div>
+<div class="tile"><b id="evt">0</b><span>events since boot</span></div>
+<div class="tile"><b id="fps">0</b><span>frames per s</span></div>
+</div></section>
+
+<section><h2>Harvest</h2>
+<div class="tiles">
+<div class="tile"><b id="live">0</b><span id="livehint">credited live</span></div>
+<div class="tile"><b id="keys">0</b><span>blocks released</span></div>
+<div class="tile"><b id="kpm">0</b><span>blocks per min</span></div>
+<div class="tile"><b id="faults">0</b><span>I2C faults</span></div>
+</div>
+<label>Budget toward next block <span id="budgetpct" class="mono"></span></label>
+<div class="bar"><i id="budget"></i></div>
+<p class="hint">Released bytes are never shown here. Assessments stay provisional until you enter Phase 0 values.</p>
+</section>
+
+<section class="warn" id="dumpbar" hidden></section>
+
+<section><h2>Sources</h2>
+<div class="scroll"><table><thead><tr><th>source</th><th>state</th><th>assessed</th><th>funded bits</th><th>min-entropy</th><th>perfect at n</th><th>Shannon</th><th>samples n</th><th>last window min / Shannon</th><th>Markov</th><th>RCT worst</th><th>APT worst</th></tr></thead><tbody id="src"></tbody></table></div>
+<div class="btns"><button class="ghost" onclick="cmd('STATS RESET')">Reset measurements</button></div>
+<p class="hint">Entropy columns are bits per sample, 8 at most, measured on the raw samples over everything collected since the last reset. <b>assessed</b> is what the release budget counts. <b>funded bits</b> is how many bits of each source's credit were spent on released blocks since the last reset, and its share of the total: exactly who paid for the output. Every block costs 256. Credit thrown away by a health failure, an assessment change or a DUMP never counts. <b>min-entropy</b> is the NIST most-common-value estimate, red when it falls below the assessment. It carries a 99% safety margin that only shrinks with more samples, so compare it with <b>perfect at n</b>: what an ideal random source reads at the same sample count. A perfect source reaches 7.9 at about 1.8 million samples (30 minutes for a 1 kHz source, 4 for the hardware RNG). <b>Shannon</b> is the average. <b>Markov</b> is the dependency estimate over 128-bit paths. <b>RCT</b> and <b>APT</b> are the NIST continuous tests: worst repeat run and worst count in a 512-sample window since the last health reset, against the cutoff that fails the source, failures after the dot. H healthy, D degraded, W warming, F failed and latched. <span class="mix">mix</span> rows never fund a block. Swipe the table sideways for more columns.</p>
+</section>
+
+<section><h2>Conditioned output</h2>
+<div class="tiles">
+<div class="tile"><b id="omin">-</b><span>min-entropy per byte</span></div>
+<div class="tile"><b id="operf">-</b><span>perfect source at this n</span></div>
+<div class="tile"><b id="osh">-</b><span>Shannon per byte</span></div>
+<div class="tile"><b id="obytes">0</b><span>bytes measured, n</span></div>
+</div>
+<label>Toward 1.8 million bytes, where a perfect source reads 7.9 <span id="opct" class="mono"></span></label>
+<div class="bar"><i id="obar"></i></div>
+<dl style="margin-top:10px">
+<dt>Markov</dt><dd id="omk" class="mono">-</dd>
+<dt>RCT worst</dt><dd id="orct" class="mono">-</dd>
+<dt>APT worst</dt><dd id="oapt" class="mono">-</dd>
+<dt>Last window</dt><dd id="owin" class="mono">-</dd>
+</dl>
+<p class="hint">Measured on the released blocks, since the last reset, without keeping any of them. Read min-entropy against <b>perfect source at this n</b>: a healthy output tracks it closely, and both climb toward 8 as bytes accumulate (7.57 at 65 thousand, 7.88 at a million, 7.91 at two million). At one 32-byte block a second, 7.9 takes about 16 hours of running. A hash output looks random whatever went into it, so these numbers check the release path, never the sources.</p>
+</section>
+
+<section><h2>Network</h2><dl>
+<dt>Wi-Fi</dt><dd id="wifi">-</dd>
+<dt>Address</dt><dd id="ip" class="mono">-</dd>
+<dt>Signal</dt><dd id="rssi">-</dd>
+<dt>Strum</dt><dd id="tstrum" class="mono">-</dd>
+<dt>Entropy</dt><dd id="tent" class="mono">-</dd>
+<dt>Sent</dt><dd id="sent">-</dd>
+<dt>Settings</dt><dd id="save">-</dd>
+<dt>Watchdog</dt><dd id="wdt">-</dd>
+<dt>Last reset</dt><dd id="reset">-</dd>
+<dt>Uptime</dt><dd id="up">-</dd>
+<dt>Sensor</dt><dd id="chip">-</dd>
+</dl></section>
+
+<section><h2>Motion tuning</h2>
+<div class="row">
+<div><label for="thr">Accel, 8 mg steps</label><input id="thr" type="number" min="1" max="255" inputmode="numeric"></div>
+<div><label for="gthr">Rotation, &deg;/s (0 off)</label><input id="gthr" type="number" min="0" max="255" inputmode="numeric"></div>
+</div>
+<label for="deb">Debounce, ms</label><input id="deb" type="number" min="0" max="10000" inputmode="numeric">
+<label for="hpf">Motion high-pass</label>
+<select id="hpf">
+<option value="4">0.63 Hz (whole-body movement)</option>
+<option value="3">1.25 Hz</option>
+<option value="2">2.5 Hz</option>
+<option value="1">5 Hz (strum transients)</option>
+<option value="0">Off (no motion events)</option>
+</select>
+<p class="hint" id="thrmg"></p>
+<p class="hint">To tune: rest the guitar still and watch the Movement trace. Both lines should stay under the dashed line; if one does not, raise that trigger one step. Then play and move: strums and body movement should cross the line. Lower a trigger if movement you want counted stays under. For micro movement, rotation is the sensitive one: 1 to 3 &deg;/s picks up a lean or a breath, while acceleration bottoms out around 2 or 3 steps (16 to 24 mg), where the sensor's own noise begins.</p>
+<div class="btns"><button onclick="applyMotion()">Apply</button></div>
+</section>
+
+<section><h2>Targets</h2>
+<div class="row">
+<div><label for="sip">Strum and heartbeat target</label><input id="sip" placeholder="auto" autocapitalize="off" autocomplete="off"></div>
+<div><label for="sport">Port</label><input id="sport" type="number" min="1" max="65535" inputmode="numeric"></div>
+<div><label for="eip">Entropy target</label><input id="eip" placeholder="auto" autocapitalize="off" autocomplete="off"></div>
+<div><label for="eport">Port</label><input id="eport" type="number" min="1" max="65535" inputmode="numeric"></div>
+</div>
+<div class="row">
+<div><label for="udp">UDP sending</label><select id="udp"><option value="1">on</option><option value="0">off</option></select></div>
+<div><label for="udpctl">UDP control port</label><select id="udpctl"><option value="1">open</option><option value="0">closed</option></select></div>
+</div>
+<p class="hint">"auto" follows the hotspot gateway. The UDP control port has no password, so close it once you manage Nocturnus from here.</p>
+<div class="btns"><button onclick="applyTargets()">Apply</button></div>
+</section>
+
+<section><h2>Assessment</h2>
+<div class="row">
+<div><label for="hsrc">Source</label><select id="hsrc" onchange="fillH()"></select></div>
+<div><label for="hval">Min-entropy, bits per sample</label><input id="hval" type="number" min="0" max="8" step="0.125" inputmode="decimal"></div>
+</div>
+<div class="btns"><button onclick="setH()">Set</button><button class="ghost" onclick="cmd('SET reset=all')">Reset all health</button></div>
+<p class="hint">Enter Phase 0 results here. Changing an assessment discards unspent credit. An assessment above zero makes a source count toward releases; only the MPU sources, clock_beat, hw_rng and adc_noise can count. The rest are mixed in but can be steered from outside, so they never count.</p>
+<label for="minlive">Credited sources that must be live for a release</label>
+<div class="row">
+<div><input id="minlive" type="number" min="1" max="16" inputmode="numeric"></div>
+<div><button style="margin-top:0" onclick="cmd('SET min_live='+$('minlive').value)">Apply</button></div>
+</div>
+<p class="hint">Default 4, which needs the MPU. hw_rng is credited too, so 1 releases blocks from the ESP32's hardware RNG alone (true random while the radio is on) when the MPU is missing; the MPU sources join automatically when it answers. 2 also counts adc_noise once you give it an assessment.</p>
+</section>
+
+<section><h2>Wi-Fi</h2>
+<label for="ssid">Network name</label><input id="ssid" maxlength="32" autocomplete="off" autocapitalize="off">
+<label for="wpass">Password</label><input id="wpass" type="password" maxlength="64" autocomplete="new-password">
+<div class="btns"><button onclick="setWifi()">Connect</button></div>
+<p class="hint">If you reached this page through that network, it drops for a few seconds while Nocturnus reconnects.</p>
+</section>
+
+<section><h2>Admin</h2>
+<label for="np1">New dashboard password, 8 to 64 characters</label><input id="np1" type="password" autocomplete="new-password">
+<label for="np2">Confirm</label><input id="np2" type="password" autocomplete="new-password">
+<div class="btns"><button onclick="setPass()">Change password</button></div>
+<div class="btns"><button class="ghost" onclick="cmd('SAVE')">Save now</button><button class="ghost" onclick="ask('REBOOT','Reboot Nocturnus?')">Reboot</button><button class="danger" onclick="ask('FACTORY','Erase every saved setting and reboot on the compiled defaults?')">Factory reset</button></div>
+<label for="console">Command</label><input id="console" class="mono" placeholder="HELP" autocapitalize="off" autocomplete="off" onkeydown="if(event.key==='Enter'){cmd(this.value);this.value=''}">
+<p class="hint">Last reply: <span id="lastreply" class="mono">none yet</span></p>
+<p class="hint">Same grammar as the USB port. Settings save to flash three seconds after the last change.</p>
+</section>
+
+</main><div id="toast"></div>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let last=null,refill=true,okAt=0,named=false;
+const hist=[],kq=[],HIST=60;let thrMg=64,thrG=8;
+
+function fmtUp(ms){const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+"h "+m+"m":m?m+"m "+(s%60)+"s":s+"s"}
+function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),4000)}
+function q(s){return '"'+s+'"'}
+function target(v){v=v.trim();return v===""?"auto":v}
+
+async function cmd(line){
+  line=(line||"").trim();if(!line)return;
+  try{
+    const r=await fetch("/api/cmd",{method:"POST",body:line,headers:{"Content-Type":"text/plain","X-Nocturnus":"1"},cache:"no-store"});
+    if(r.status===401){signOut();toast("Signed out. Reload the page to sign in.");return ""}
+    const t=await r.text();toast(t);$("lastreply").textContent=line+"  =>  "+t;refill=true;poll();return t;
+  }catch(e){toast("ERR no response");$("lastreply").textContent=line+"  =>  ERR no response";return ""}
+}
+function ask(c,msg){if(confirm(msg))cmd(c)}
+function applyMotion(){cmd("SET mot_thr="+$("thr").value+" gyro_thr="+$("gthr").value+" debounce="+$("deb").value+" hpf="+$("hpf").value)}
+function applyTargets(){cmd("SET strum_ip="+target($("sip").value)+" entropy_ip="+target($("eip").value)+" port="+$("sport").value+" entropy_port="+$("eport").value+" udp="+$("udp").value+" udpctl="+$("udpctl").value)}
+function setH(){
+  const v=parseFloat($("hval").value);
+  if(!(v>=0&&v<=8)){toast("ERR enter 0 to 8 bits");return}
+  const txt=v.toFixed(3).replace(/0+$/,"").replace(/\.$/,".0");
+  cmd("SET h_"+$("hsrc").value+"="+txt);
+}
+function fillH(){if(!last)return;const r=last.sources.find(x=>x[0]===$("hsrc").value);if(r)$("hval").value=(r[3]/256).toFixed(3).replace(/0+$/,"").replace(/\.$/,"")}
+function setWifi(){
+  const s=$("ssid").value,p=$("wpass").value;
+  if(!s){toast("ERR network name required");return}
+  if(s.includes('"')||p.includes('"')){toast("ERR quotes are not allowed");return}
+  cmd("WIFI "+q(s)+" "+q(p));$("wpass").value="";
+}
+async function setPass(){
+  const a=$("np1").value,b=$("np2").value;
+  if(a!==b){toast("ERR the two passwords differ");return}
+  if(a.length<8){toast("ERR at least 8 characters");return}
+  if(a.includes('"')){toast("ERR quotes are not allowed");return}
+  const t=await cmd("PASS "+q(a));$("np1").value=$("np2").value="";
+  if(t&&t.startsWith("OK")){signOut();toast("Password changed. Reload the page and sign in with the new one.")}
+}
+
+// Each trace is drawn as a fraction of its own trigger, so 1 is the dashed
+// line for both. Rotation is left out while its trigger is off.
+function draw(){
+  const c=$("spark"),x=c.getContext("2d"),w=c.width,h=c.height;x.clearRect(0,0,w,h);
+  const ra=hist.map(v=>v[0]/thrMg),rg=thrG?hist.map(v=>v[1]/(thrG*10)):[];
+  const max=Math.max(1.5,...ra,...rg),step=w/(HIST-1),y=r=>h-6-(r/max)*(h-16);
+  x.strokeStyle="#262e48";x.lineWidth=1;x.beginPath();x.moveTo(0,h-1);x.lineTo(w,h-1);x.stroke();
+  x.setLineDash([10,8]);x.strokeStyle="#ffc266";x.lineWidth=2;x.beginPath();x.moveTo(0,y(1));x.lineTo(w,y(1));x.stroke();x.setLineDash([]);
+  if(hist.length<2)return;
+  const line=(rs,stroke,fill)=>{
+    x.beginPath();rs.forEach((r,i)=>{const px=i*step,py=y(r);i?x.lineTo(px,py):x.moveTo(px,py)});
+    x.strokeStyle=stroke;x.lineWidth=3;x.lineJoin="round";x.stroke();
+    if(fill){x.lineTo((rs.length-1)*step,h);x.lineTo(0,h);x.closePath();x.fillStyle=fill;x.fill()}
+  };
+  line(ra,"#8ca8ff","rgba(140,168,255,.13)");
+  if(rg.length)line(rg,"#5ee0a0",null);
+}
+
+const RESETS={power_on:"power on",software:"reboot command",watchdog:"WATCHDOG, the sampler hung",system_watchdog:"system watchdog",brownout:"BROWNOUT, check the battery",usb:"USB",deep_sleep:"deep sleep",other:"other",unknown:"unknown"};
+function saveText(s){
+  const m={saved:"saved to flash",pending:"change pending, saving shortly",never:"never saved, running on defaults",error:"last save FAILED",unavailable:"no settings partition found",corrupt:"stored settings unreadable, running on defaults"};
+  return (m[s.state]||s.state)+(s.writes?" ("+s.writes+" writes this boot)":"");
+}
+
+function render(s){
+  if(last&&s.uptime_ms<last.uptime_ms){last=null;hist.length=0;kq.length=0}
+  $("defpw").hidden=!s.admin_default;
+  $("nompu").hidden=s.mpu.ready;
+  $("mpuerr").textContent=s.mpu.error?"Last probe: "+s.mpu.error+".":"";
+  $("chip").textContent=s.mpu.ready?s.mpu.chip+" at 0x"+s.mpu.addr.toString(16)+(s.mpu.link?", "+s.mpu.link:""):"not found";
+  const rot=(s.motion.gyro_dps10/10).toFixed(1);
+  $("lvl").textContent=s.motion.level_mg;$("rot").textContent=rot;$("evt").textContent=s.motion.events;
+  thrMg=s.mpu.thr*8;thrG=s.mpu.gthr;
+  hist.push(s.mpu.ready?[s.motion.level_mg,s.motion.gyro_dps10]:[0,0]);if(hist.length>HIST)hist.shift();draw();
+  $("up").textContent=fmtUp(s.uptime_ms);
+
+  kq.push([s.uptime_ms,s.harvest.keys]);while(kq.length&&s.uptime_ms-kq[0][0]>60000)kq.shift();
+  if(kq.length>1){const a=kq[0],b=kq[kq.length-1],dt=(b[0]-a[0])/60000;$("kpm").textContent=dt>0?Math.round((b[1]-a[1])/dt):0}
+
+  if(last){
+    const dt=(s.uptime_ms-last.uptime_ms)/1000;
+    if(dt>0){
+      const mps=Math.max(0,(s.motion.raw-last.motion.raw)/dt);
+      $("mps").textContent=Math.round(mps);
+      $("eps").textContent=((s.motion.events-last.motion.events)/dt).toFixed(1);
+      $("fps").textContent=Math.round((s.mpu.frames-last.mpu.frames)/dt);
+    }
+  }
+
+  $("live").textContent=s.harvest.live;
+  $("livehint").textContent="credited live, need "+s.harvest.min;
+  $("keys").textContent=s.harvest.keys;
+  $("faults").textContent=s.mpu.faults;
+  $("budget").style.width=Math.min(100,s.harvest.budget)+"%";
+  $("budgetpct").textContent=s.harvest.budget+"%";
+
+  const bits=q=>(q/256).toFixed(2);
+  // What an ideal random byte source reads on NIST's most-common-value
+  // estimator after n samples (fitted to simulation: 6.61 at 4096, 6.93 at
+  // 8192, 7.88 at 1M, 7.91 at 2M). Below 1024 samples it means little.
+  const perfect=n=>{if(n<1024)return "-";const p=1/256,k=5.6+0.9*Math.min(1,Math.sqrt(4096/n));return(-Math.log2(p+k*Math.sqrt(p/n))).toFixed(2)};
+  const fmtN=n=>n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n);
+  const tb=$("src");tb.textContent="";
+  const ernTot=s.sources.reduce((a,r)=>a+r[19],0);
+  for(const r of s.sources){
+    const [n,v,c,hq,rcf,apf,mk,en,sh,mn,prog,win,rcm,rcc,apm,apc,tn,tsh,tmn,ern]=r,tr=document.createElement("tr");
+    const cell=(t,cls)=>{const d=document.createElement("td");d.textContent=t;if(cls)d.className=cls;tr.appendChild(d);return d};
+    const nm=cell(n);if(!c){const m=document.createElement("span");m.className="mix";m.textContent="mix";nm.appendChild(m)}
+    const vd=document.createElement("td"),b=document.createElement("span");b.className="v v"+v;b.textContent=v;vd.appendChild(b);tr.appendChild(vd);
+    cell(bits(hq));
+    cell(ern?fmtN(ern)+" ("+(100*ern/ernTot).toFixed(ern*10<ernTot?1:0)+"%)":"-",ern?"":"dim");
+    if(tn){cell(bits(tmn),c&&tmn<hq?"low":"");cell(perfect(tn),"dim");cell(bits(tsh));cell(fmtN(tn),"dim")}
+    else{cell("collecting","dim");cell("-","dim");cell("-","dim");cell(prog+"/"+win,"dim")}
+    cell(en?bits(mn)+" / "+bits(sh):"-","dim");
+    cell(mk===65535?"-":bits(mk*8),mk===65535?"dim":"");
+    cell(rcm+"/"+rcc+(rcf?" ."+rcf:""),rcf?"low":"");
+    cell(apm+"/"+apc+(apf?" ."+apf:""),apf?"low":"");
+    tb.appendChild(tr);
+  }
+  const o=s.output,[otn,otsh,otmn]=o.total;
+  $("obytes").textContent=fmtN(otn||0);
+  $("omin").textContent=otn?bits(otmn):"-";
+  $("operf").textContent=otn?perfect(otn):"-";
+  $("osh").textContent=otn?bits(otsh):"-";
+  const opct=Math.min(100,(otn||0)/18000);$("obar").style.width=opct+"%";$("opct").textContent=opct.toFixed(1)+"%";
+  $("omk").textContent=o.markov===65535?"-":bits(o.markov*8);
+  $("orct").textContent=o.rct[0]+"/"+o.rct[1]+"  failures "+o.rct[2];
+  $("oapt").textContent=o.apt[0]+"/"+o.apt[1]+"  failures "+o.apt[2];
+  $("owin").textContent=(o.n?"min "+bits(o.min)+", Shannon "+bits(o.shannon)+" over "+o.n+" bytes; ":"")+"next at "+o.progress+"/"+o.window;
+  const db=$("dumpbar");
+  if(s.dump){db.hidden=false;db.textContent="Raw capture running on "+s.dump.source+": "+s.dump.left+" samples to go. Releases are paused until it finishes. It ends by itself if the sensor drops out. Stop it over USB with DUMP STOP."}else{db.hidden=true}
+  if(!named){
+    const sel=$("hsrc");
+    for(const r of s.sources){const o=document.createElement("option");o.value=r[0];o.textContent=r[0];sel.appendChild(o)}
+    named=true;
+  }
+
+  $("wifi").textContent=(s.wifi.ssid||"-")+(s.wifi.up?" | connected":" | not connected");
+  $("ip").textContent=s.wifi.ip?s.wifi.ip+"  gateway "+s.wifi.gw:"no address yet";
+  $("rssi").textContent=s.wifi.up?s.wifi.rssi+" dBm":"-";
+  $("tstrum").textContent=s.targets.strum+"  ("+s.targets.strum_pin+")";
+  $("tent").textContent=s.targets.entropy+"  ("+s.targets.entropy_pin+")";
+  $("sent").textContent="entropy "+s.sent.entropy+" | strum "+s.sent.strum+" | heartbeat "+s.sent.heartbeat+(s.sent.errors?" | errors "+s.sent.errors:"");
+  $("save").textContent=saveText(s.save);
+  $("wdt").textContent=s.wdt?"armed, fed while the sampler runs":"not armed yet";
+  $("reset").textContent=RESETS[s.reset]||s.reset;
+  $("thrmg").textContent="Triggers now: "+(s.mpu.thr*8)+" mg, "+(s.mpu.gthr?s.mpu.gthr+" \u00b0/s":"rotation off")+". Right now: "+s.motion.level_mg+" mg, "+rot+" \u00b0/s.";
+
+  if(refill){
+    refill=false;
+    $("thr").value=s.mpu.thr;$("gthr").value=s.mpu.gthr;$("deb").value=s.mpu.debounce;$("hpf").value=s.mpu.hpf;
+    $("sip").value=s.targets.strum_pin;$("eip").value=s.targets.entropy_pin;
+    $("sport").value=s.targets.strum_port;$("eport").value=s.targets.entropy_port;
+    $("udp").value=s.targets.udp?1:0;$("udpctl").value=s.targets.udpctl?1:0;
+    $("minlive").value=s.harvest.min;
+    if(!$("ssid").value)$("ssid").value=s.wifi.ssid;
+    last=s;fillH();
+  }
+  last=s;
+}
+
+// Once the password on file stops matching (it was changed here or from
+// another device), stop polling: every retry with the old password would earn
+// a growing delay on the node and tie up its listeners.
+let signedOut=false;
+function signOut(){signedOut=true;$("dot").classList.remove("on");$("conn").textContent="reload to sign in"}
+async function poll(){
+  if(signedOut)return;
+  try{
+    const r=await fetch("/api/status",{cache:"no-store"});
+    if(r.status===401){signOut();return}
+    if(!r.ok)throw 0;
+    render(await r.json());okAt=Date.now();
+  }catch(e){}
+  const on=Date.now()-okAt<3500;$("dot").classList.toggle("on",on);
+  if(signedOut)return;
+  if(on)$("conn").textContent="live";else if(okAt)$("conn").textContent="no response";
+}
+setInterval(poll,1000);poll();
+</script></body></html>

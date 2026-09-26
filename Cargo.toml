@@ -1,0 +1,98 @@
+[package]
+name = "guitarng-mpu"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "guitarng-mpu"
+path = "src/main.rs"
+test = false
+bench = false
+
+# ============================================================================
+#  VERSION NOTE, because this is where an evening disappears.
+#
+#  The ESP Rust stack was restructured and most tutorials are now wrong:
+#
+#    esp-wifi          -> renamed to  esp-radio
+#    esp-hal-embassy   -> replaced by esp-rtos
+#
+#  esp-hal-embassy 0.9.x is still published but is a DEAD END: it requires a
+#  `__esp_hal_embassy` feature that esp-hal 1.1+ no longer has, so it pins you
+#  to esp-hal 1.0.x, while esp-radio requires esp-hal ~1.2. The two cannot
+#  coexist. Cargo's error for this says esp-hal both does and does not have the
+#  feature, which is not a helpful way to be told.
+#
+#  esp-rtos is the current answer. It wants esp-hal ~1.2 and embassy-executor
+#  0.10, which lines up with esp-radio. This exact set was resolved and
+#  verified; changing one version will likely break the others.
+#
+#  esp-rtos requires a global allocator, so esp-alloc is not optional here.
+# ============================================================================
+
+[target.'cfg(target_arch = "xtensa")'.dependencies]
+esp-hal = { version = "1.2", features = ["esp32s3", "unstable"] }
+# Scheduler + Embassy integration. `esp-radio` feature wires the RTOS driver
+# the radio stack needs.
+esp-rtos = { version = "0.4", features = ["esp32s3", "embassy", "esp-radio"] }
+esp-radio = { version = "1.0.0-beta.1", features = ["esp32s3", "wifi", "unstable"] }
+esp-alloc = "0.11"
+# Settings persistence. 0.10 is the release aligned with esp-hal ~1.2.
+esp-storage = { version = "0.10", features = ["esp32s3"] }
+esp-backtrace = { version = "0.20", features = [
+    "esp32s3",
+    "panic-handler",
+    "println",
+] }
+# espflash v4 uses the ESP-IDF second-stage bootloader and requires this
+# application descriptor in every bare-metal esp-hal image.
+esp-bootloader-esp-idf = { version = "0.6", features = ["esp32s3"] }
+# default-features MUST be off here. esp-println's defaults include `auto`,
+# and its build script panics if more than one transport feature is on, so
+# `auto` + `jtag-serial` is a hard error rather than a precedence.
+#
+# jtag-serial rather than auto: the Super Mini's USB-C is the S3's native
+# USB Serial/JTAG, and picking it explicitly means the choice is in the file
+# instead of in a build script's guess.
+esp-println = { version = "0.18", default-features = false, features = [
+    "esp32s3",
+    "jtag-serial",
+    "critical-section",
+    "colors",
+] }
+
+# Do NOT enable any `arch-*` or `platform-*` feature on embassy-executor.
+# esp-rtos provides the executor; adding one here conflicts with it.
+embassy-executor = "0.10"
+embassy-time = "0.5"
+embassy-sync = "0.8"
+embassy-net = { version = "0.7", features = [
+    "dhcpv4",
+    "dhcpv4-hostname",
+    "medium-ethernet",
+    "tcp",
+    "udp",
+] }
+
+# The conditioner requested for this node. RustCrypto's SHA3 implementation is
+# `no_std` with default features disabled.
+sha3 = { version = "0.10.9", default-features = false }
+embassy-futures = "0.1.2"
+embedded-io-async = "0.7.0"
+static_cell = "2.1.1"
+# Only for the DHCP hostname field, whose type embassy-net takes from heapless 0.8.
+heapless = "0.8"
+
+[profile.release]
+# opt-level 3 matters here. The health tests run on every one of ~8000 samples
+# per second; a debug build will not keep up with the interrupt rate.
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = 2
+overflow-checks = false
+
+[profile.dev]
+# Even for development, the sampling path needs optimization or the data-ready
+# interrupts outrun the handler and frames are silently missed.
+opt-level = 2
